@@ -205,16 +205,19 @@ body:has(#player-ui-glass.minimal-mode) #background-blur {
     transition: left 0.8s cubic-bezier(0.33, 1, 0.68, 1), opacity 0.5s ease-in-out;
 }
 
-/* 正常播放/封面卡片模式下轻微下移（不影响歌词模式与封面模式） */
-body:not(.lyrics-active):not(.cover-mode) .container {
-    top: 55%;
+/* 正常播放模式：保持居中（排除极简模式和封面模式） */
+body:not(.lyrics-active):not(.cover-mode) .container:not(.minimal-active) {
+    top: 50%;
     transform: translate(-50%, -50%);
 }
 
 /* --- Minimal Mode Container Override --- */
-.container:has(#player-ui-glass.minimal-mode) {
+.container:has(#player-ui-glass.minimal-mode),
+.container.minimal-active {
     max-width: 98vw; /* Allow more width for minimal mode */
     width: 98vw; /* Full viewport width */
+    top: 55%; /* 极简模式下移 */
+    transform: translate(-50%, -50%);
 }
 
 /* Backup for browsers that don't support :has() */
@@ -655,6 +658,7 @@ input[type="file"] { display: none; }
 #player-wrapper.minimal-active {
     max-width: none !important;
     width: 90vw !important;
+
 }
 
 #player-ui-distorted-bg {
