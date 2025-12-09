@@ -15,6 +15,7 @@
     "allow-get-font-data",
     "allow-prepare-audio-file",
     "allow-cleanup-cached-file",
+    "allow-scan-music-folder",
     "core:event:default"
   ]
 }

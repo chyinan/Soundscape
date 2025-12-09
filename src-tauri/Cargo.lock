@@ -121,6 +121,7 @@ dependencies = [
  "tauri-plugin-shell",
  "tempfile",
  "urlencoding",
+ "walkdir",
  "windows 0.58.0",
 ]
 

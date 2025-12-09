@@ -18,4 +18,9 @@ commands.allow = ["prepare_audio_file"]
 [[permission]]
 identifier = "allow-cleanup-cached-file"
 description = "Allows invoking the cleanup_cached_file command"
-commands.allow = ["cleanup_cached_file"] 
+commands.allow = ["cleanup_cached_file"]
+
+[[permission]]
+identifier = "allow-scan-music-folder"
+description = "Allows invoking the scan_music_folder command"
+commands.allow = ["scan_music_folder"]

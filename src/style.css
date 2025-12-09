@@ -240,7 +240,12 @@ body:not(.lyrics-active):not(.cover-mode) .container:not(.minimal-active) {
     top: 1.5rem;
     right: 1.5rem;
     cursor: pointer;
-    font-size: 1.8rem;
+    width: 2.8rem;
+    height: 2.8rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    /* font-size: 1.8rem; Removed to let SVG control size */
     color: var(--secondary-text-color);
     transition: color 0.3s, transform 0.3s;
     z-index: 1001; /* Ensure it's above everything */
@@ -1736,4 +1741,260 @@ body.cover-mode #info-wrapper {
         height: auto;
         min-height: 100%;
     }
+}
+
+/* --- NEW: Playlist Button & Panel Styles --- */
+.playlist-icon-container {
+    position: fixed;
+    top: 1.5rem;
+    left: 1.5rem;
+    cursor: pointer;
+    width: 2.8rem;
+    height: 2.8rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    /* font-size: 1.8rem; Removed to let SVG control size */
+    color: var(--secondary-text-color);
+    transition: color 0.3s, transform 0.3s, opacity 0.5s ease-in-out; /* Added opacity transition */
+    z-index: 1001;
+    opacity: 1;
+}
+
+.playlist-icon-container:hover {
+    color: var(--primary-text-color);
+    transform: scale(1.1);
+    opacity: 1 !important; /* Ensure it shows up on hover even if faded */
+}
+
+.playlist-icon-container.faded {
+    opacity: 0 !important;
+    /* Keep pointer-events auto so hover still works to reveal it */
+    pointer-events: auto; 
+}
+
+.playlist-panel {
+    position: fixed;
+    top: 4.5rem;
+    left: 1.5rem;
+    background: rgba(20, 20, 20, 0.85);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border-radius: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    z-index: 1000;
+    width: 320px;
+    height: 60vh;
+    display: flex;
+    flex-direction: column;
+    opacity: 0;
+    transform: translateX(-10px);
+    transition: opacity 0.3s, transform 0.3s;
+    pointer-events: none;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+}
+
+.playlist-panel:not(.hidden) {
+    opacity: 1;
+    transform: translateX(0);
+    pointer-events: auto;
+}
+
+.playlist-header {
+    padding: 1rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.playlist-header h3 {
+    margin: 0;
+    color: var(--primary-text-color);
+    font-size: 1.1rem;
+}
+
+.playlist-controls button {
+    background: transparent;
+    border: none;
+    color: var(--secondary-text-color);
+    cursor: pointer;
+    font-size: 1.1rem;
+    margin-left: 0.5rem;
+    transition: color 0.2s;
+}
+
+.playlist-controls button:hover {
+    color: var(--primary-text-color);
+}
+
+.playlist-content {
+    flex-grow: 1;
+    overflow-y: auto;
+    padding: 0.5rem 0;
+}
+
+.playlist-content::-webkit-scrollbar {
+    width: 4px;
+}
+
+.playlist-content::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 2px;
+}
+
+#playlist-items {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.playlist-item {
+    padding: 0.8rem 1rem;
+    cursor: pointer; /* 悬停和点击时保持普通指针 */
+    user-select: none; /* 防止拖拽时触发文本选择 */
+    -webkit-user-select: none;
+    -webkit-user-drag: element; /* 明确启用元素拖拽 */
+    color: var(--secondary-text-color);
+    font-size: 0.95rem;
+    /* 添加过渡动画实现平滑效果 */
+    transition: transform 0.25s cubic-bezier(0.2, 0, 0, 1),
+                margin 0.25s cubic-bezier(0.2, 0, 0, 1),
+                opacity 0.2s ease,
+                background 0.2s ease;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    /* 确保高度可动画 */
+    max-height: 100px;
+    box-sizing: border-box;
+}
+
+.playlist-item:hover {
+    background: rgba(255, 255, 255, 0.05);
+    color: var(--primary-text-color);
+}
+
+.playlist-item.active {
+    background: rgba(255, 255, 255, 0.1);
+    color: var(--accent-color);
+    font-weight: 500;
+}
+
+.playlist-item .delete-btn {
+    opacity: 0;
+    transition: opacity 0.2s, color 0.2s;
+    background: transparent;
+    border: none;
+    color: var(--secondary-text-color);
+    cursor: pointer;
+    padding: 2px 6px;
+    font-size: 0.9em;
+}
+
+.playlist-item:hover .delete-btn {
+    opacity: 1;
+}
+
+.playlist-item .delete-btn:hover {
+    color: #ff4d4d;
+}
+
+/* 被拖拽的项目 - 收缩并消失，模拟"抽出"效果 */
+.playlist-item.dragging {
+    opacity: 0;
+    max-height: 0 !important;
+    padding-top: 0 !important;
+    padding-bottom: 0 !important;
+    margin: 0 !important;
+    border: none !important;
+    pointer-events: none;
+    /* 使用更快的过渡让"抽出"感更明显 */
+    transition: all 0.15s cubic-bezier(0.2, 0, 0, 1) !important;
+}
+
+/* 拖拽悬停 - 在上方打开空间 */
+.playlist-item.drag-over-top {
+    transform: translateY(22px); /* 向下移动，留出空间 */
+    position: relative;
+    background: rgba(255, 255, 255, 0.08); /* 轻微高亮提示 */
+}
+
+/* 在上方显示插入指示线 */
+.playlist-item.drag-over-top::before {
+    content: '';
+    position: absolute;
+    top: -12px;
+    left: 0.5rem;
+    right: 0.5rem;
+    height: 3px;
+    background: linear-gradient(90deg, transparent, var(--accent-color), var(--accent-color), transparent);
+    border-radius: 2px;
+    box-shadow: 0 0 8px var(--accent-color);
+    animation: insertLineGlow 1s ease-in-out infinite;
+}
+
+/* 拖拽悬停 - 在下方打开空间 */
+.playlist-item.drag-over-bottom {
+    transform: translateY(-22px); /* 向上移动，留出空间 */
+    position: relative;
+    background: rgba(255, 255, 255, 0.08); /* 轻微高亮提示 */
+}
+
+/* 在下方显示插入指示线 */
+.playlist-item.drag-over-bottom::after {
+    content: '';
+    position: absolute;
+    bottom: -12px;
+    left: 0.5rem;
+    right: 0.5rem;
+    height: 3px;
+    background: linear-gradient(90deg, transparent, var(--accent-color), var(--accent-color), transparent);
+    border-radius: 2px;
+    box-shadow: 0 0 8px var(--accent-color);
+    animation: insertLineGlow 1s ease-in-out infinite;
+}
+
+/* 插入线呼吸动画 */
+@keyframes insertLineGlow {
+    0%, 100% { opacity: 0.7; }
+    50% { opacity: 1; }
+}
+
+/* 拖拽进行中，容器的样式 */
+#playlist-items.is-dragging {
+    /* 可以添加一些视觉反馈 */
+}
+
+/* 拖拽时禁用子元素事件，防止光标闪烁或变禁止符号 */
+#playlist-items.dragging-active .playlist-item > * {
+    pointer-events: none;
+}
+
+#playlist-empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    color: var(--secondary-text-color);
+    gap: 1rem;
+}
+
+.small-btn {
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    color: var(--primary-text-color);
+    padding: 0.4rem 0.8rem;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.small-btn:hover {
+    background: rgba(255, 255, 255, 0.2);
 }

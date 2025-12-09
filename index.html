@@ -24,8 +24,46 @@
     <!-- NEW: Video element for dynamic background -->
     <video id="background-video" autoplay muted loop playsinline></video>
 
+    <!-- NEW: Playlist Button (Top Left) -->
+    <div class="playlist-icon-container" id="playlistBtn">
+        <!-- Replaced generic fa-list with a modern SVG icon -->
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="8" y1="6" x2="21" y2="6"></line>
+            <line x1="8" y1="12" x2="21" y2="12"></line>
+            <line x1="8" y1="18" x2="21" y2="18"></line>
+            <line x1="3" y1="6" x2="3.01" y2="6"></line>
+            <line x1="3" y1="12" x2="3.01" y2="12"></line>
+            <line x1="3" y1="18" x2="3.01" y2="18"></line>
+        </svg>
+    </div>
+
+    <!-- NEW: Playlist Panel -->
+    <div class="playlist-panel hidden" id="playlistPanel">
+        <div class="playlist-header">
+            <h3>播放列表</h3>
+            <div class="playlist-controls">
+                <button id="importFolderBtn" title="导入文件夹"><i class="fas fa-folder-plus"></i></button>
+                <button id="clearPlaylistBtn" title="清空列表"><i class="fas fa-trash-alt"></i></button>
+                <button id="playModeBtn" title="播放模式: 列表循环"><i class="fas fa-repeat"></i></button>
+            </div>
+        </div>
+        <div class="playlist-content">
+            <ul id="playlist-items">
+                <!-- Playlist items will be injected here -->
+            </ul>
+            <div id="playlist-empty-state">
+                <p>暂无歌曲</p>
+                <button id="importFolderBtnEmpty" class="small-btn">导入文件夹</button>
+            </div>
+        </div>
+    </div>
+
     <div class="settings-icon-container" id="settingsBtn">
-        <i class="fas fa-cog"></i>
+        <!-- Replaced generic fa-cog with a modern SVG icon -->
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="3"></circle>
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+        </svg>
     </div>
 
     <div class="settings-panel hidden" id="settingsPanel">

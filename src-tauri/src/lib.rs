@@ -11,6 +11,36 @@ use std::os::windows::process::CommandExt;
 // use font_kit::family::Family; // no longer needed
 use font_kit::handle::Handle;
 use font_kit::properties::{Style, Weight};
+use walkdir::WalkDir;
+
+#[derive(Serialize)]
+struct AudioFile {
+    path: String,
+    name: String,
+}
+
+#[tauri::command]
+fn scan_music_folder(path: String) -> Result<Vec<AudioFile>, String> {
+    let mut files = Vec::new();
+    let supported_extensions = ["mp3", "wav", "flac", "m4a", "ogg"];
+
+    for entry in WalkDir::new(path).into_iter().filter_map(|e| e.ok()) {
+        let path = entry.path();
+        if path.is_file() {
+            if let Some(ext) = path.extension().and_then(|s| s.to_str()) {
+                if supported_extensions.contains(&ext.to_lowercase().as_str()) {
+                    files.push(AudioFile {
+                        path: path.to_string_lossy().to_string(),
+                        name: path.file_stem().unwrap_or_default().to_string_lossy().to_string(),
+                    });
+                }
+            }
+        }
+    }
+    // Simple sort
+    files.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+    Ok(files)
+}
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -658,7 +688,8 @@ pub fn run() {
             get_system_fonts,
             get_font_data,
             prepare_audio_file,
-            cleanup_cached_file
+            cleanup_cached_file,
+            scan_music_folder
         ])
         .setup(|app| {
             if cfg!(debug_assertions) {

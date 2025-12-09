@@ -1,7 +1,7 @@
 // ES 模块导入
 import { invoke, convertFileSrc } from '@tauri-apps/api/core';
 import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
-import { open as dialogOpen } from '@tauri-apps/plugin-dialog';
+import { open as dialogOpen, ask } from '@tauri-apps/plugin-dialog';
 // Import shell.open from plugin-shell to launch default system browser
 import { open as openInBrowser } from '@tauri-apps/plugin-shell';
 // 引入语言识别库
@@ -44,6 +44,17 @@ const coverModeLyrics = document.getElementById('cover-mode-lyrics');
 const settingsBtn = document.getElementById('settingsBtn');
 const settingsPanel = document.getElementById('settingsPanel');
 const githubLink = document.getElementById('githubLink');
+
+// Playlist Elements
+const playlistBtn = document.getElementById('playlistBtn');
+const playlistPanel = document.getElementById('playlistPanel');
+const playlistContent = document.querySelector('.playlist-content');
+const playlistItems = document.getElementById('playlist-items');
+const importFolderBtn = document.getElementById('importFolderBtn');
+const clearPlaylistBtn = document.getElementById('clearPlaylistBtn'); // New
+const playModeBtn = document.getElementById('playModeBtn');
+const playlistEmptyState = document.getElementById('playlist-empty-state');
+const importFolderBtnEmpty = document.getElementById('importFolderBtnEmpty');
 
 // Font Selection Elements
 const fontChineseSelect = document.getElementById('font-chinese-select');
@@ -104,6 +115,108 @@ let currentLyricIndex = -1;
 // 0: off, 1: translation only, 2: bilingual (orig/trans), 3: bilingual-reversed (trans/orig), 4: original only, 5: text only, 6: text only (reversed)
 let lyricsDisplayMode = 0;
 let currentDominantColorRGB = null; // Store dominant color for player card background
+
+// Playlist State
+let playlist = [];
+let currentPlaylistIndex = -1;
+let playMode = 'loop-list'; // 'loop-list', 'loop-one', 'play-list'
+// Removed duplicate declaration of playlistBtnHideTimer
+
+// === Persistence Logic ===
+
+function savePlaylistState() {
+    try {
+        localStorage.setItem('savedPlaylist', JSON.stringify(playlist));
+        localStorage.setItem('savedPlaylistIndex', currentPlaylistIndex.toString());
+        // Optionally save playMode
+        localStorage.setItem('savedPlayMode', playMode);
+    } catch (e) {
+        console.error("Failed to save playlist state:", e);
+    }
+}
+
+function loadPlaylistState() {
+    try {
+        const savedPlaylist = localStorage.getItem('savedPlaylist');
+        const savedIndex = localStorage.getItem('savedPlaylistIndex');
+        const savedMode = localStorage.getItem('savedPlayMode');
+
+        if (savedPlaylist) {
+            playlist = JSON.parse(savedPlaylist);
+            renderPlaylist();
+        }
+
+        if (savedIndex !== null) {
+            const idx = parseInt(savedIndex, 10);
+            if (!isNaN(idx) && idx >= 0 && idx < playlist.length) {
+                currentPlaylistIndex = idx;
+                // Highlight initial track without playing
+                const items = playlistItems.querySelectorAll('.playlist-item');
+                items.forEach((item, i) => {
+                    if (i === currentPlaylistIndex) item.classList.add('active');
+                });
+            }
+        }
+        
+        if (savedMode) {
+            playMode = savedMode;
+            updatePlayModeUI();
+        }
+        
+        if (playlist.length > 0) {
+             // If we have a playlist, ensure empty state is hidden
+             playlistItems.style.display = 'block';
+             playlistEmptyState.style.display = 'none';
+        }
+
+    } catch (e) {
+        console.error("Failed to load playlist state:", e);
+    }
+}
+
+function updatePlayModeUI() {
+    const icons = {
+        'loop-list': 'fa-repeat',
+        'loop-one': 'fa-1', 
+        'play-list': 'fa-arrow-right'
+    };
+    const titles = {
+        'loop-list': '列表循环',
+        'loop-one': '单曲循环',
+        'play-list': '列表播放'
+    };
+    
+    const iconClass = icons[playMode];
+    if (playMode === 'loop-one') {
+         playModeBtn.innerHTML = `<span class="fa-stack" style="font-size: 0.6em;"><i class="fas fa-repeat fa-stack-2x"></i><strong class="fa-stack-1x" style="font-size: 0.7em; margin-top: 1px;">1</strong></span>`;
+    } else {
+        playModeBtn.innerHTML = `<i class="fas ${iconClass}"></i>`;
+    }
+    playModeBtn.title = `播放模式: ${titles[playMode]}`;
+}
+
+// === Button Auto-Hide Logic ===
+
+function startPlaylistBtnTimer() {
+    clearTimeout(playlistBtnHideTimer);
+    
+    // Only hide if playlist panel is NOT open
+    if (!playlistPanel.classList.contains('hidden')) {
+        playlistBtn.classList.remove('faded');
+        return;
+    }
+
+    playlistBtnHideTimer = setTimeout(() => {
+        playlistBtn.classList.add('faded');
+    }, 5000);
+}
+
+function handleButtonInteraction() {
+    clearTimeout(playlistBtnHideTimer);
+    playlistBtn.classList.remove('faded');
+}
+
+let playlistBtnHideTimer = null; // Timer for auto-hiding playlist button
 
 // === NEW: Settings and Font Management (Refactored) ===
 
@@ -745,12 +858,18 @@ function clearCustomBackground() {
 // 获取当前窗口实例
 const appWindow = WebviewWindow.getCurrent();
 
-async function handleFile(filePath) {
+let activeLoadToken = 0;
+
+async function handleFile(filePath, autoPlay = true) {
     if (!filePath) {
         // This case handles when the user cancels the dialog
         console.log("File selection was cancelled.");
         return;
     }
+    
+    // Increment token to invalidate any previous pending load/play operations
+    const currentToken = ++activeLoadToken;
+    
     showLoading('Processing Audio...');
 
     try {
@@ -834,9 +953,19 @@ async function handleFile(filePath) {
         audioPlayer.src = audioUrl;
 
         const readyHandler = () => {
+            // If another file load started, ignore this one
+            if (currentToken !== activeLoadToken) return;
+
             finalizeTransition();
             audioPlayer.removeEventListener('loadedmetadata', readyHandler);
-            audioPlayer.play().catch(e => console.error('Audio playback failed:', e));
+            if (autoPlay) {
+                audioPlayer.play()
+                    .then(() => {
+                        // Force start timer on successful play
+                        startPlaylistBtnTimer();
+                    })
+                    .catch(e => console.error('Audio playback failed:', e));
+            }
         };
 
         // 如果 metadata 已经可用，就直接执行，否则等待事件
@@ -856,6 +985,563 @@ async function handleFile(filePath) {
     } finally {
         // hideLoading 会在 finalizeTransition 中处理
     }
+}
+
+// === Playlist Logic ===
+
+async function importFolder() {
+    try {
+        const selected = await dialogOpen({
+            directory: true,
+            multiple: false,
+        });
+        
+        if (selected) {
+            showLoading('Scanning Folder...');
+            // Call backend to scan folder
+            const files = await invoke('scan_music_folder', { path: selected });
+            
+            if (files && files.length > 0) {
+                // Append or Replace? Let's Replace for now as it's cleaner
+                playlist = files;
+                currentPlaylistIndex = 0;
+                renderPlaylist();
+                // savePlaylistState(); // Save state
+                if (typeof savePlaylistState === 'function') savePlaylistState();
+                
+                // Automatically play the first track
+                if (playlist.length > 0) {
+                    // playTrackAtIndex(0); // Removed to prevent auto-play
+                    currentPlaylistIndex = 0;
+                    const track = playlist[0];
+                    
+                    // Highlight UI but don't play
+                    const items = playlistItems.querySelectorAll('.playlist-item');
+                    items.forEach((item, idx) => {
+                        if (idx === 0) item.classList.add('active');
+                        else item.classList.remove('active');
+                    });
+                    
+                    // Load file but pause
+                    await handleFile(track.path, false);
+                }
+            } else {
+                alert('No supported audio files found in this folder.');
+            }
+            hideLoading();
+        }
+    } catch (e) {
+        console.error("Error importing folder:", e);
+        hideLoading();
+        alert('Failed to import folder.');
+    }
+}
+
+async function clearPlaylist() {
+    const confirmed = await ask('确定要清空播放列表吗？', { title: 'Immersive Music Player', kind: 'warning' });
+    if (confirmed) {
+        playlist = [];
+        currentPlaylistIndex = -1;
+        renderPlaylist();
+        
+        // Clear saved state
+        if (typeof savePlaylistState === 'function') savePlaylistState();
+        
+        // Don't reset player UI so the current song keeps playing
+        // resetPlayerUI();
+    }
+}
+
+function deleteTrackAtIndex(index, event) {
+    if (event) event.stopPropagation();
+    
+    // 从播放列表中删除该歌曲
+    playlist.splice(index, 1);
+
+    // 如果删除的是当前正在播放的歌曲
+    if (index === currentPlaylistIndex) {
+        // 调整 currentPlaylistIndex，使其指向删除后列表中的正确位置（即原来的上一首）
+        // 这样可以保证当前播放不受影响，且当当前歌曲播放结束时，
+        // playNext() 计算出的下一首（(current + 1)）会是原本的下一首（现在的 index 位置）。
+        
+        if (playlist.length === 0) {
+            // 如果列表空了
+            currentPlaylistIndex = -1;
+            // 此时不需要立即停止播放，让当前歌播完。
+            // 播完后 playNext 会处理空列表的情况。
+        } else {
+            // 指向上一首。如果删的是第一首(index=0)，变成 -1，也是合理的。
+            currentPlaylistIndex = index - 1;
+        }
+        
+        // 注意：不调用 playTrackAtIndex，也不暂停，保持当前播放。
+        // UI 上，高亮可能会跳到上一首，或者如果没有上一首就不高亮，这是符合逻辑的副作用。
+        
+    } else if (index < currentPlaylistIndex) {
+        // 如果删除的歌曲在当前播放歌曲之前，当前索引需要减1以保持指向同一首歌
+        currentPlaylistIndex--;
+    }
+    // 如果删除的在后面，currentPlaylistIndex 不变
+
+    if (typeof savePlaylistState === 'function') savePlaylistState();
+    renderPlaylist();
+}
+
+// 拖拽相关变量
+let dragSrcEl = null;
+let dragSrcIndex = -1;
+let lastDragOverState = null; // 记录上一次的拖拽悬停状态
+let lastMouseY = null; // 记录上一次鼠标Y坐标
+let dragOverThrottleTimer = null; // 节流定时器
+
+function renderPlaylist() {
+    playlistItems.innerHTML = '';
+    
+    // 在整个播放列表面板设置拖放处理，确保任何位置都允许拖放
+    // 这样即使鼠标移动到面板任何区域，都不会显示禁止符号
+    const setupDragOverHandler = (element) => {
+        if (!element) return;
+        element.ondragover = (e) => {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'move';
+        };
+        element.ondragenter = (e) => {
+            e.preventDefault();
+        };
+        element.ondrop = (e) => {
+            e.preventDefault();
+        };
+    };
+    
+    setupDragOverHandler(playlistPanel);
+    setupDragOverHandler(playlistContent);
+    // 使用 addEventListener 替代 ondragover 以避免覆盖，增加鲁棒性
+    if (playlistItems) {
+        playlistItems.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'move';
+        });
+        playlistItems.addEventListener('dragenter', (e) => {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'move';
+        });
+    }
+    
+    if (playlist.length === 0) {
+        playlistItems.style.display = 'none';
+        playlistEmptyState.style.display = 'flex';
+    } else {
+        playlistItems.style.display = 'block';
+        playlistEmptyState.style.display = 'none';
+        
+        playlist.forEach((track, index) => {
+            const li = document.createElement('li');
+            li.className = 'playlist-item';
+            li.draggable = true; // 启用拖拽
+            
+            if (index === currentPlaylistIndex) {
+                li.classList.add('active');
+            }
+            
+            // 歌曲名称容器
+            const nameSpan = document.createElement('span');
+            nameSpan.textContent = track.name;
+            nameSpan.style.flexGrow = '1';
+            nameSpan.style.overflow = 'hidden';
+            nameSpan.style.textOverflow = 'ellipsis';
+            li.appendChild(nameSpan);
+            
+            // 删除按钮
+            const deleteBtn = document.createElement('button');
+            deleteBtn.className = 'delete-btn';
+            deleteBtn.innerHTML = '<i class="fas fa-times"></i>';
+            deleteBtn.title = '从列表中删除';
+            deleteBtn.onclick = (e) => deleteTrackAtIndex(index, e);
+            // 防止在删除按钮上触发拖拽
+            deleteBtn.addEventListener('mousedown', (e) => e.stopPropagation());
+            li.appendChild(deleteBtn);
+            
+            // 点击播放
+            li.onclick = (e) => {
+                // 避免触发删除按钮的点击
+                if (e.target.closest('.delete-btn')) return;
+                playTrackAtIndex(index);
+            };
+
+            // === 拖拽事件监听 ===
+            li.addEventListener('dragstart', (e) => {
+                console.log('Drag Start:', index);
+                dragSrcEl = li;
+                dragSrcIndex = index;
+                e.dataTransfer.effectAllowed = 'move';
+                e.dataTransfer.setData('text/plain', index.toString());
+                
+                // 重置状态变量
+                lastDragOverState = null;
+                lastMouseY = null;
+                if (dragOverThrottleTimer) {
+                    clearTimeout(dragOverThrottleTimer);
+                    dragOverThrottleTimer = null;
+                }
+                
+                // 延迟添加 dragging 类，让浏览器先捕获拖拽预览图
+                setTimeout(() => {
+                    li.classList.add('dragging');
+                    // 给容器添加标记，用于 CSS 选择器
+                    playlistItems.classList.add('is-dragging');
+                }, 10);
+            });
+
+            li.addEventListener('dragend', () => {
+                console.log('Drag End');
+                li.classList.remove('dragging');
+                playlistItems.classList.remove('is-dragging');
+                
+                // 清除所有定时器和状态
+                if (dragOverThrottleTimer) {
+                    clearTimeout(dragOverThrottleTimer);
+                    dragOverThrottleTimer = null;
+                }
+                lastDragOverState = null;
+                lastMouseY = null;
+                
+                // 清除所有悬停状态
+                const items = playlistItems.querySelectorAll('.playlist-item');
+                items.forEach(item => {
+                    item.classList.remove('drag-over-top');
+                    item.classList.remove('drag-over-bottom');
+                });
+            });
+
+            li.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                e.dataTransfer.dropEffect = 'move';
+
+                // 跳过拖拽源本身
+                if (li === dragSrcEl) return;
+
+                // 如果当前项目已经有状态了（由 dragenter 设置），且鼠标移动不大，就不更新
+                const hasState = li.classList.contains('drag-over-top') || li.classList.contains('drag-over-bottom');
+                const mouseY = e.clientY;
+                
+                // 只有在鼠标明显移动（超过10px）且当前没有状态，或者需要切换状态时才处理
+                if (hasState) {
+                    // 已经有状态了，检查是否需要切换
+                    if (lastMouseY !== null && Math.abs(mouseY - lastMouseY) < 15) {
+                        return; // 鼠标移动不大，保持当前状态
+                    }
+                }
+
+                lastMouseY = mouseY;
+
+                // 使用节流减少处理频率
+                if (dragOverThrottleTimer) {
+                    return;
+                }
+                dragOverThrottleTimer = setTimeout(() => {
+                    dragOverThrottleTimer = null;
+                }, 150); // 增加到150ms，进一步减少频率
+
+                const rect = li.getBoundingClientRect();
+                const itemHeight = rect.height;
+                const midY = rect.top + itemHeight / 2;
+                const distanceFromMid = Math.abs(mouseY - midY);
+                const deadZone = itemHeight * 0.35; // 35% 死区
+
+                // 只有在死区外且状态需要改变时才更新
+                if (distanceFromMid > deadZone) {
+                    const newState = mouseY < midY ? 'top' : 'bottom';
+                    const stateKey = `${index}-${newState}`;
+                    
+                    // 只有状态真正改变时才更新
+                    if (lastDragOverState !== stateKey) {
+                        lastDragOverState = stateKey;
+                        
+                        if (newState === 'top') {
+                            li.classList.add('drag-over-top');
+                            li.classList.remove('drag-over-bottom');
+                        } else {
+                            li.classList.add('drag-over-bottom');
+                            li.classList.remove('drag-over-top');
+                        }
+                    }
+                } else if (hasState) {
+                    // 在死区内，清除状态（但只在已有状态时才清除，避免频繁操作）
+                    if (lastDragOverState && lastDragOverState.startsWith(`${index}-`)) {
+                        lastDragOverState = null;
+                        li.classList.remove('drag-over-top');
+                        li.classList.remove('drag-over-bottom');
+                    }
+                }
+            });
+
+            li.addEventListener('dragenter', (e) => {
+                e.preventDefault();
+                e.dataTransfer.dropEffect = 'move';
+                
+                // 跳过拖拽源本身
+                if (li === dragSrcEl) return;
+                
+                // 在 dragenter 时根据鼠标位置设置初始状态
+                const rect = li.getBoundingClientRect();
+                const itemHeight = rect.height;
+                const midY = rect.top + itemHeight / 2;
+                const mouseY = e.clientY;
+                const distanceFromMid = Math.abs(mouseY - midY);
+                const deadZone = itemHeight * 0.4;
+                
+                // 清除其他项目的状态
+                const items = playlistItems.querySelectorAll('.playlist-item');
+                items.forEach(item => {
+                    if (item !== li) {
+                        item.classList.remove('drag-over-top');
+                        item.classList.remove('drag-over-bottom');
+                    }
+                });
+                
+                // 只有在死区外才设置状态
+                if (distanceFromMid > deadZone) {
+                    if (mouseY < midY) {
+                        li.classList.add('drag-over-top');
+                        li.classList.remove('drag-over-bottom');
+                        lastDragOverState = `${index}-top`;
+                    } else {
+                        li.classList.add('drag-over-bottom');
+                        li.classList.remove('drag-over-top');
+                        lastDragOverState = `${index}-bottom`;
+                    }
+                    lastMouseY = mouseY;
+                }
+            });
+
+            li.addEventListener('dragleave', (e) => {
+                // 只有真正离开元素时才移除类（避免子元素触发）
+                if (!li.contains(e.relatedTarget)) {
+                    // 清除该项目的状态记录
+                    if (lastDragOverState && lastDragOverState.startsWith(`${index}-`)) {
+                        lastDragOverState = null;
+                    }
+                    li.classList.remove('drag-over-top');
+                    li.classList.remove('drag-over-bottom');
+                }
+            });
+
+            li.addEventListener('drop', (e) => {
+                console.log('Drop on:', index);
+                e.preventDefault();
+                e.stopPropagation();
+                
+                if (dragSrcEl && dragSrcEl !== li) {
+                    // 计算目标索引
+                    let targetIndex = index;
+                    
+                    // 再次判断鼠标位置，确认是放在上面还是下面
+                    const rect = li.getBoundingClientRect();
+                    const midY = rect.top + rect.height / 2;
+                    
+                    // 如果放在上半部分，targetIndex 就是当前 index（插入到当前之前）
+                    // 如果放在下半部分，targetIndex 就是 index + 1（插入到当前之后）
+                    // 注意：数组操作时，先移除原元素，索引会变，需小心处理
+                    
+                    // 简化逻辑：我们只交换数据，或者移动数据
+                    // 移动数据逻辑：
+                    // 1. 取出源数据
+                    // 2. 插入到目标位置
+                    
+                    const itemToMove = playlist[dragSrcIndex];
+                    
+                    // 从原位置删除
+                    playlist.splice(dragSrcIndex, 1);
+                    
+                    // 因为删除元素后，如果原位置在目标位置之前，目标索引需要减1
+                    // 但如果我们在删除之前计算好了插入位置，就比较简单
+                    // 这里我们采用更健壮的方式：
+                    // 如果 dragSrcIndex < index (从上往下拖)，且放在下半部分(insertAfter)，实际插入 index
+                    // 如果 dragSrcIndex < index (从上往下拖)，且放在上半部分(insertBefore)，实际插入 index - 1
+                    
+                    // 重新调整策略：根据视觉反馈
+                    let insertAtIndex = index;
+                    if (e.clientY > midY) {
+                         insertAtIndex = index + 1;
+                    }
+                    
+                    // 修正：如果源在目标之前，删除源后，目标索引减1
+                    if (dragSrcIndex < insertAtIndex) {
+                        insertAtIndex--;
+                    }
+
+                    playlist.splice(insertAtIndex, 0, itemToMove);
+                    
+                    // 更新 currentPlaylistIndex
+                    // 如果移动的是当前播放的歌曲
+                    if (currentPlaylistIndex === dragSrcIndex) {
+                        currentPlaylistIndex = insertAtIndex;
+                    } else {
+                        // 如果移动的不是当前歌曲，但跨越了当前歌曲
+                        // 情况A: 当前歌曲在 移动源 和 移动目标 之间
+                        // ... 逻辑比较复杂，简单判断：
+                        // 如果当前播放歌曲在前面，被移到了后面 -> 不需要，因为已经更新了playlist
+                        // 我们只需要找到当前正在播放的歌曲的新索引
+                        // 但由于对象引用可能变了（如果我们存的是对象），或者简单点：
+                        // 我们在 render 前，不需要太复杂，因为我们已经重新排列了数组。
+                        // 唯一的问题是 currentPlaylistIndex 指向的数字可能不再对应原来的歌。
+                        
+                        // 解决方案：由于我们移动的是数组元素，当前播放的歌曲对象还在数组里。
+                        // 如果我们能根据"是否是正在播放的那首歌"来重置 currentPlaylistIndex 最好。
+                        // 但这里没有唯一 ID。假设名字不重复？不一定。
+                        // 比较好的办法是：记录当前播放状态，移动后重新计算。
+                        
+                        // 简化版逻辑修正：
+                        if (dragSrcIndex < currentPlaylistIndex && insertAtIndex >= currentPlaylistIndex) {
+                            currentPlaylistIndex--;
+                        } else if (dragSrcIndex > currentPlaylistIndex && insertAtIndex <= currentPlaylistIndex) {
+                            currentPlaylistIndex++;
+                        }
+                    }
+
+                    if (typeof savePlaylistState === 'function') savePlaylistState();
+                    renderPlaylist();
+                }
+                return false;
+            });
+
+            playlistItems.appendChild(li);
+        });
+    }
+}
+
+async function playTrackAtIndex(index) {
+    if (index < 0 || index >= playlist.length) return;
+    
+    currentPlaylistIndex = index;
+    // savePlaylistState(); // Save state
+    if (typeof savePlaylistState === 'function') savePlaylistState();
+    const track = playlist[index];
+    
+    // Update UI active state
+    const items = playlistItems.querySelectorAll('.playlist-item');
+    items.forEach((item, idx) => {
+        if (idx === index) item.classList.add('active');
+        else item.classList.remove('active');
+    });
+    
+    await handleFile(track.path);
+}
+
+function togglePlayMode() {
+    const modes = ['loop-list', 'loop-one', 'play-list'];
+    const icons = {
+        'loop-list': 'fa-repeat',
+        'loop-one': 'fa-1', // Assuming font-awesome has this, or use text
+        'play-list': 'fa-arrow-right'
+    };
+    const titles = {
+        'loop-list': '列表循环',
+        'loop-one': '单曲循环',
+        'play-list': '列表播放'
+    };
+    
+    let currentIdx = modes.indexOf(playMode);
+    let nextIdx = (currentIdx + 1) % modes.length;
+    playMode = modes[nextIdx];
+    // savePlaylistState(); // Save new mode
+    if (typeof savePlaylistState === 'function') savePlaylistState();
+    
+    updatePlayModeUI();
+}
+
+// Helper moved to updatePlayModeUI
+/*
+function togglePlayMode_Old() {
+    // ... (Logic refactored into togglePlayMode and updatePlayModeUI)
+}
+*/
+
+function playNext(auto = true) {
+    if (playlist.length === 0) return;
+    
+    let nextIndex = currentPlaylistIndex;
+    
+    if (playMode === 'loop-one') {
+        if (auto) {
+            // Loop current
+            nextIndex = currentPlaylistIndex;
+        } else {
+            // Manually clicking next goes to next even in loop-one
+            nextIndex = (currentPlaylistIndex + 1) % playlist.length;
+        }
+    } else if (playMode === 'loop-list') {
+        nextIndex = (currentPlaylistIndex + 1) % playlist.length;
+    } else if (playMode === 'play-list') {
+        if (currentPlaylistIndex < playlist.length - 1) {
+            nextIndex = currentPlaylistIndex + 1;
+        } else {
+            // End of playlist
+            return; 
+        }
+    }
+    
+    playTrackAtIndex(nextIndex);
+}
+
+function setupPlaylist() {
+    // Toggle Panel
+    playlistBtn.addEventListener('click', () => {
+        playlistPanel.classList.toggle('hidden');
+        
+        if (!playlistPanel.classList.contains('hidden')) {
+            // If opened, stop timer and show button
+            handleButtonInteraction();
+        } else {
+            // If closed and playing, start timer
+            if (!audioPlayer.paused) {
+                startPlaylistBtnTimer();
+            }
+        }
+    });
+    
+    // Close when clicking outside
+    document.addEventListener('click', (e) => {
+        if (!playlistPanel.contains(e.target) && 
+            !playlistBtn.contains(e.target)) {
+            playlistPanel.classList.add('hidden');
+            // If playing, resume auto-hide timer
+            if (!audioPlayer.paused) {
+                startPlaylistBtnTimer();
+            }
+        }
+    });
+    
+    importFolderBtn.addEventListener('click', importFolder);
+    importFolderBtnEmpty.addEventListener('click', importFolder);
+    clearPlaylistBtn.addEventListener('click', clearPlaylist); // New
+    
+    playModeBtn.addEventListener('click', togglePlayMode);
+    
+    // Audio Ended Event
+    audioPlayer.addEventListener('ended', () => {
+        if (playlist.length > 0) {
+            playNext(true);
+        }
+    });
+
+    // === Button Auto-Hide Events ===
+    audioPlayer.addEventListener('play', () => {
+        startPlaylistBtnTimer();
+    });
+
+    audioPlayer.addEventListener('pause', () => {
+        handleButtonInteraction(); // Show button on pause
+    });
+
+    playlistBtn.addEventListener('mouseenter', handleButtonInteraction);
+    playlistBtn.addEventListener('mousemove', handleButtonInteraction); // Extra safety
+    
+    playlistBtn.addEventListener('mouseleave', () => {
+        if (!audioPlayer.paused) {
+            startPlaylistBtnTimer();
+        }
+    });
 }
 
 function formatTime(seconds) {
@@ -925,27 +1611,50 @@ document.addEventListener('mouseup', () => {
 });
 
 
-const currentWindow = appWindow;
-    currentWindow.onDragDropEvent(async (evt) => {
-        const { type, paths } = evt.payload;
+// === 文件拖入处理（使用 Web API 替代 Tauri onDragDropEvent） ===
+// 注意：已在 tauri.conf.json 中禁用 dragDropEnabled，以允许内部 HTML5 DnD 工作
+document.body.addEventListener('dragover', (e) => {
+    // 检查是否是外部文件拖入（dataTransfer.types 包含 'Files'）
+    if (e.dataTransfer && e.dataTransfer.types.includes('Files')) {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'copy';
+        document.body.classList.add('drag-over');
+    }
+});
 
-        if (type === 'enter') {
-            document.body.classList.add('drag-over');
-        } else if (type === 'leave') {
-            document.body.classList.remove('drag-over');
-        } else if (type === 'drop') {
-            document.body.classList.remove('drag-over');
-            if (paths && paths.length) {
-                const audioPath = paths.find(p => /\.(mp3|wav|flac|m4a)$/i.test(p));
-                if (audioPath) {
+document.body.addEventListener('dragleave', (e) => {
+    // 只在离开 body 时移除样式（避免子元素触发）
+    if (e.target === document.body || !document.body.contains(e.relatedTarget)) {
+        document.body.classList.remove('drag-over');
+    }
+});
+
+document.body.addEventListener('drop', async (e) => {
+    document.body.classList.remove('drag-over');
+    
+    // 检查是否有文件
+    if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+        e.preventDefault();
+        
+        // 查找音频文件
+        const files = Array.from(e.dataTransfer.files);
+        const audioFile = files.find(f => /\.(mp3|wav|flac|m4a)$/i.test(f.name));
+        
+        if (audioFile) {
+            // 对于 Tauri，我们需要文件路径而非 File 对象
+            // dataTransfer.files 在 Tauri WebView 中可能包含 path 属性
+            const filePath = audioFile.path || audioFile.name;
+            if (filePath && filePath.includes('/') || filePath.includes('\\')) {
                 showLoading('Analyzing Audio...');
-                    await handleFile(audioPath);
-                } else {
-                alert('Please drop a valid audio file (mp3, wav, flac, m4a).');
+                await handleFile(filePath);
+            } else {
+                alert('无法获取文件路径。请使用文件选择器导入音频。');
             }
-            }
+        } else {
+            alert('请拖入有效的音频文件 (mp3, wav, flac, m4a)');
         }
-    });
+    }
+});
 
 window.addEventListener('keydown', (event) => {
         switch (event.key.toLowerCase()) {
@@ -1008,6 +1717,11 @@ window.addEventListener('keydown', (event) => {
                     // 从 封面 -> 普通
                     document.body.classList.remove('cover-mode');
                     coverModeLyricsContainer.classList.add('hidden');
+                }
+                break;
+            case 'escape':
+                if (!playerWrapper.classList.contains('hidden')) {
+                    resetPlayerUI();
                 }
                 break;
         }
@@ -1476,6 +2190,9 @@ function showLyricsModeIndicator(mode) {
 document.addEventListener('DOMContentLoaded', () => {
     // All initial setup calls can go here.
     setupSettings();
+    // NEW: Ensure functions are defined before calling
+    if (typeof setupPlaylist === 'function') setupPlaylist(); 
+    if (typeof loadPlaylistState === 'function') loadPlaylistState(); 
 
     // Custom background button listeners
     customBgBtn.addEventListener('click', async () => {
