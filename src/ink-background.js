@@ -172,7 +172,7 @@ export class InkBackground {
         this.gl.viewport(0, 0, this.gl.canvas.width, this.gl.canvas.height);
     }
 
-    updateColors(hexColors) {
+    updateColors(hexColors, overrideColor = null) {
         if (!hexColors || hexColors.length === 0) return;
         
         // Convert hex to normalized RGB
@@ -195,6 +195,18 @@ export class InkBackground {
         while (newColors.length < 3) {
             newColors.push(newColors[newColors.length % newColors.length]);
         }
+        
+        // Apply override if provided (Matches player panel adaptive color)
+        if (overrideColor) {
+            newColors[0] = [
+                overrideColor.r / 255,
+                overrideColor.g / 255,
+                overrideColor.b / 255
+            ];
+            // Optionally adjust other colors to be related to the override color
+            // for a more cohesive look in Ink mode
+        }
+
         // Slice to 3
         this.colors = newColors.slice(0, 3);
     }

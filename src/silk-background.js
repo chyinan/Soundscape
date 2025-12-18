@@ -153,11 +153,11 @@ export class SilkBackground {
         this.gl.viewport(0, 0, this.gl.canvas.width, this.gl.canvas.height);
     }
 
-    updateColors(hexColors) {
+    updateColors(hexColors, overrideColor = null) {
         if (!hexColors || hexColors.length === 0) return;
         
         // Convert hex to normalized RGB
-        this.colors = hexColors.map(hex => {
+        let newColors = hexColors.map(hex => {
             if (!hex) return [0.1, 0.1, 0.1];
             // Handle #RRGGBB
             let r = 0, g = 0, b = 0;
@@ -174,13 +174,21 @@ export class SilkBackground {
         });
         
         // Ensure we have 4 colors by cycling
-        while (this.colors.length < 4) {
-            this.colors.push(this.colors[this.colors.length % this.colors.length]);
+        while (newColors.length < 4) {
+            newColors.push(newColors[newColors.length % newColors.length]);
         }
-        // Trim if too many (shader only uses 4)
-        if (this.colors.length > 4) {
-            this.colors = this.colors.slice(0, 4);
+        
+        // Apply override if provided (Matches player panel adaptive color)
+        if (overrideColor) {
+            newColors[0] = [
+                overrideColor.r / 255,
+                overrideColor.g / 255,
+                overrideColor.b / 255
+            ];
         }
+
+        // Slice to 4
+        this.colors = newColors.slice(0, 4);
     }
 
     start() {

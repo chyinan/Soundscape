@@ -106,6 +106,7 @@ const panelCustomColorPicker = document.getElementById('panel-custom-color-picke
 const panelAdaptiveColorContainer = document.getElementById('panel-adaptive-color-container');
 const panelCustomColorContainer = document.getElementById('panel-custom-color-container');
 const bgBlurRange = document.getElementById('bg-blur-range');
+const bgBlurSetting = document.getElementById('bg-blur-setting');
 const playerCardBgBlurRange = document.getElementById('player-card-bg-blur-range');
 const playerCardBgBlurContainer = document.getElementById('player-card-bg-blur-container');
 
@@ -775,12 +776,12 @@ function updatePanelSettingsVisibility() {
 
 /**
  * Updates the visibility of background-related settings based on the current background mode.
- * In "silk" mode, album art background and custom background settings should be hidden.
+ * In non-static modes, album art background and custom background settings should be hidden.
  */
 function updateBackgroundModeSettingsVisibility() {
-    const isSilkMode = currentBgMode === 'silk';
+    const shouldHideSettings = currentBgMode !== 'static';
     
-    if (isSilkMode) {
+    if (shouldHideSettings) {
         // Hide and disable album art background setting
         if (albumArtBgContainer) {
             albumArtBgContainer.classList.add('hidden');
@@ -827,14 +828,36 @@ function updateBackgroundModeSettingsVisibility() {
     }
 }
 
+function getPanelColorRGB() {
+    if (panelAdaptiveColorToggle.checked) {
+        return currentDominantColorRGB || { r: 100, g: 100, b: 100 };
+    } else {
+        const hexColor = panelCustomColorPicker.value;
+        let r = 255, g = 255, b = 255;
+        if (hexColor.startsWith('#')) {
+            const hex = hexColor.substring(1);
+            if (hex.length === 3) {
+                r = parseInt(hex[0] + hex[0], 16);
+                g = parseInt(hex[1] + hex[1], 16);
+                b = parseInt(hex[2] + hex[2], 16);
+            } else if (hex.length === 6) {
+                r = parseInt(hex.substring(0, 2), 16);
+                g = parseInt(hex.substring(2, 4), 16);
+                b = parseInt(hex.substring(4, 6), 16);
+            }
+        }
+        return { r, g, b };
+    }
+}
+
 function updateBackgrounds() {
     const useAlbumArtBg = albumArtBgToggle.checked;
     const customBgPath = localStorage.getItem('customBgPath');
     const customBgVideoPath = localStorage.getItem('customBgVideoPath'); // NEW: Get video path
 
     // Rule 1: Control the custom background selector UI
-    // Only apply this rule if not in silk mode (silk mode handles visibility separately)
-    if (currentBgMode !== 'silk') {
+    // Only apply this rule if in static mode
+    if (currentBgMode === 'static') {
         customBgContainer.classList.toggle('disabled', useAlbumArtBg);
     }
 
@@ -850,33 +873,8 @@ function updateBackgrounds() {
             distortedBg.style.backgroundImage = 'none';
             distortedBg.style.filter = 'none'; // Ensure no blur in color mode
             
-            // Check if adaptive color is enabled
-            if (panelAdaptiveColorToggle.checked) {
-                if (currentDominantColorRGB) {
-                    const { r, g, b } = currentDominantColorRGB;
-                    distortedBg.style.backgroundColor = `rgba(${r}, ${g}, ${b}, 0.8)`;
-                } else {
-                    distortedBg.style.backgroundColor = 'rgba(100, 100, 100, 0.5)';
-                }
-            } else {
-                // Use custom color
-                const hexColor = panelCustomColorPicker.value;
-                // Convert hex to rgba with 0.8 opacity
-                let r = 255, g = 255, b = 255;
-                if (hexColor.startsWith('#')) {
-                    const hex = hexColor.substring(1);
-                    if (hex.length === 3) {
-                        r = parseInt(hex[0] + hex[0], 16);
-                        g = parseInt(hex[1] + hex[1], 16);
-                        b = parseInt(hex[2] + hex[2], 16);
-                    } else if (hex.length === 6) {
-                        r = parseInt(hex.substring(0, 2), 16);
-                        g = parseInt(hex.substring(2, 4), 16);
-                        b = parseInt(hex.substring(4, 6), 16);
-                    }
-                }
-                distortedBg.style.backgroundColor = `rgba(${r}, ${g}, ${b}, 0.8)`;
-            }
+            const { r, g, b } = getPanelColorRGB();
+            distortedBg.style.backgroundColor = `rgba(${r}, ${g}, ${b}, 0.8)`;
         }
     } else {
         distortedBg.style.backgroundImage = 'none';
@@ -905,7 +903,7 @@ function updateBackgrounds() {
         // Extract colors if we have an image
         if (albumArt.src && albumArt.src !== window.location.href) {
             getDominantColors(albumArt).then(colors => {
-                silkBg.updateColors(colors);
+                silkBg.updateColors(colors, getPanelColorRGB());
             });
         }
         
@@ -928,7 +926,7 @@ function updateBackgrounds() {
         // Extract colors if we have an image
         if (albumArt.src && albumArt.src !== window.location.href) {
             getDominantColors(albumArt).then(colors => {
-                inkBg.updateColors(colors);
+                inkBg.updateColors(colors, getPanelColorRGB());
             });
         }
         
@@ -951,28 +949,7 @@ function updateBackgrounds() {
         // Extract colors if we have an image
         if (albumArt.src && albumArt.src !== window.location.href) {
             getDominantColors(albumArt).then(colors => {
-                let overrideColor = null;
-                if (panelAdaptiveColorToggle.checked) {
-                    overrideColor = currentDominantColorRGB;
-                } else {
-                    // Use custom color if adaptive is disabled
-                    const hexColor = panelCustomColorPicker.value;
-                    let r = 255, g = 255, b = 255;
-                    if (hexColor.startsWith('#')) {
-                        const hex = hexColor.substring(1);
-                        if (hex.length === 3) {
-                            r = parseInt(hex[0] + hex[0], 16);
-                            g = parseInt(hex[1] + hex[1], 16);
-                            b = parseInt(hex[2] + hex[2], 16);
-                        } else if (hex.length === 6) {
-                            r = parseInt(hex.substring(0, 2), 16);
-                            g = parseInt(hex.substring(2, 4), 16);
-                            b = parseInt(hex.substring(4, 6), 16);
-                        }
-                    }
-                    overrideColor = { r, g, b };
-                }
-                causticsBg.updateColors(colors, overrideColor);
+                causticsBg.updateColors(colors, getPanelColorRGB());
             });
         }
         
@@ -994,7 +971,7 @@ function updateBackgrounds() {
         
         if (albumArt.src && albumArt.src !== window.location.href) {
             getDominantColors(albumArt).then(colors => {
-                auroraBg.updateColors(colors);
+                auroraBg.updateColors(colors, getPanelColorRGB());
             });
         }
         

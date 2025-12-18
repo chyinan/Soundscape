@@ -193,7 +193,7 @@ export class AuroraBackground {
         this.gl.viewport(0, 0, this.gl.canvas.width, this.gl.canvas.height);
     }
 
-    updateColors(hexColors) {
+    updateColors(hexColors, overrideColor = null) {
         if (!hexColors || hexColors.length === 0) return;
         
         // Convert hex to normalized RGB
@@ -231,6 +231,18 @@ export class AuroraBackground {
              if (parsedColors.length < 4) {
                  this.colors[3] = [this.colors[0][0]*0.2, this.colors[0][1]*0.2, this.colors[0][2]*0.2];
              }
+        }
+
+        // Apply override if provided (Matches player panel adaptive color)
+        if (overrideColor) {
+            const override = [
+                overrideColor.r / 255,
+                overrideColor.g / 255,
+                overrideColor.b / 255
+            ];
+            // Replace the background color or primary accent
+            this.colors[0] = override;
+            this.colors[3] = [override[0]*0.2, override[1]*0.2, override[2]*0.2]; // Darker version for bg
         }
     }
 
