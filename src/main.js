@@ -1938,8 +1938,9 @@ audioPlayer.addEventListener('timeupdate', () => {
 function seek(e) {
     if (audioPlayer.duration) {
         const rect = progressBarContainer.getBoundingClientRect();
+        // 使用 getBoundingClientRect() 的 width 而不是 clientWidth，确保使用实际渲染宽度
         const offsetX = e.clientX - rect.left;
-        const width = progressBarContainer.clientWidth;
+        const width = rect.width;
         const progress = Math.max(0, Math.min(1, offsetX / width));
         
         const newTime = progress * audioPlayer.duration;
